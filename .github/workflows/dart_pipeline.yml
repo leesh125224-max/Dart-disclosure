@@ -1,0 +1,37 @@
+name: DART Real-time Disclosure Pipeline
+
+on:
+  schedule:
+    # 월요일~금요일 한국 시간 07:00 ~ 08:45 사이 15분마다 실행 (UTC 전날 22:00 ~ 23:45 / 일~목요일)
+    - cron: '*/15 22-23 * * 0-4'
+    # 월요일~금요일 한국 시간 09:00 ~ 18:45 사이 15분마다 실행 (UTC 당일 00:00 ~ 09:45 / 월~금요일)
+    - cron: '*/15 0-9 * * 1-5'
+  workflow_dispatch: # GitHub 웹 콘솔에서 테스트용으로 수동 실행할 수 있게 하는 버튼 추가
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run DART Pipeline
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python execution/main.py

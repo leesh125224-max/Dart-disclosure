@@ -1,0 +1,16 @@
+# API Keys & Secrets
+.env
+
+# Python caching
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Scratch & Log directories
+scratch/
+logs/
+html_samples/
