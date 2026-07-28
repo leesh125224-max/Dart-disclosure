@@ -101,7 +101,9 @@ def run_pipeline():
                 rcept_dt = dt_kst.strftime("%Y-%m-%d")
             except Exception as e:
                 print(f"⚠️ 시간 파싱 오류 ({pub_date_str}): {type(e).__name__}")
-                ann_time_str = now_kst.strftime("%Y-%m-%d %H:%M")
+                ann_time_str = f"{now_kst.strftime('%Y-%m-%d %H:%M')} (rss 시간 매칭 실패)"
+        else:
+            ann_time_str = f"{now_kst.strftime('%Y-%m-%d %H:%M')} (rss 시간 매칭 실패)"
 
         # 회사명 및 보고서명 분리
         corp_name = "알수없음"
@@ -141,18 +143,14 @@ def run_pipeline():
 
     # DB에 존재하지 않는 새로운 공시만 필터링 (중복 방지)
     new_announcements = [ann for ann in rss_announcements if ann["rcept_no"] not in processed_rcept_nos]
-    if not new_announcements:
-        print("ℹ️ 새로 업데이트된 공시가 없습니다.")
-        return
 
-    print(f"🔍 중복 제거 후 새로 수집된 공시 건수: {len(new_announcements)}건")
-
-    # 6. DART Open API를 통해 신규 공시들의 stock_code 및 corp_code 매칭하여 보완
-    # RSS에는 없는 종목코드/고유번호를 채워 JSON API 호출 및 DB 데이터의 질을 높입니다.
+    # 6. DART Open API를 통해 신규 공시들의 stock_code 및 corp_code 매칭하여 보완 및 RSS 누락분 추가
     try:
         api_announcements = client.get_today_announcements(today_str_nodash)
         if api_announcements:
             api_map = {item.get("rcept_no"): item for item in api_announcements if item.get("rcept_no")}
+            rss_rcept_nos = {ann["rcept_no"] for ann in new_announcements}
+
             valid_new = []
             for ann in new_announcements:
                 rno = ann["rcept_no"]
@@ -169,9 +167,33 @@ def run_pipeline():
                     if item_info.get("report_nm"):
                         ann["report_nm"] = item_info.get("report_nm")
                 valid_new.append(ann)
+
+            # RSS 피드가 밀려서 누락되었으나 OpenDART API에 존재하는 공시 추가
+            for rno, api_item in api_map.items():
+                if rno not in processed_rcept_nos and rno not in rss_rcept_nos:
+                    corp_cls = api_item.get("corp_cls", "")
+                    if corp_cls in ("Y", "K"):
+                        rdt = api_item.get("rcept_dt", today_str_nodash)
+                        rdt_fmt = f"{rdt[:4]}-{rdt[4:6]}-{rdt[6:]}" if len(rdt) == 8 else today_str
+                        valid_new.append({
+                            "corp_name": api_item.get("corp_name", "알수없음"),
+                            "report_nm": api_item.get("report_nm", ""),
+                            "rcept_no": rno,
+                            "rcept_dt": rdt_fmt,
+                            "ann_time": f"{now_kst.strftime('%Y-%m-%d %H:%M')} (rss 시간 매칭 실패)",
+                            "stock_code": api_item.get("stock_code") or "",
+                            "corp_code": api_item.get("corp_code") or ""
+                        })
+
             new_announcements = valid_new
     except Exception as e:
         print(f"⚠️ DART API 상세 메타데이터 매칭 중 오류 발생: {type(e).__name__} (기본값으로 진행)")
+
+    if not new_announcements:
+        print("ℹ️ 새로 업데이트된 공시가 없습니다.")
+        return
+
+    print(f"🔍 중복 제거 후 새로 수집된 공시 건수: {len(new_announcements)}건")
 
     # 7. 핵심 공시 필터링
     critical = client.filter_critical_announcements(new_announcements)

@@ -210,7 +210,7 @@ class DartClient:
             main_url = f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={rcept_no}"
             main_res = requests.get(main_url, headers=headers, timeout=10)
             if main_res.status_code == 200:
-                page_text = main_res.text
+                page_text = self._safe_decode_res(main_res)
 
                 # dcmNo 추출: DART main.do 페이지 내 JavaScript 변수 및 함수 호출부 탐색
                 dcm_no = None
@@ -242,8 +242,9 @@ class DartClient:
                         f"&eleId=&offset=0&length=99999999&dtd=html"
                     )
                     viewer_res = requests.get(viewer_url, headers=headers, timeout=15)
-                    if viewer_res.status_code == 200 and len(viewer_res.text) > 300:
-                        return viewer_res.text
+                    viewer_text = self._safe_decode_res(viewer_res)
+                    if viewer_res.status_code == 200 and len(viewer_text) > 300:
+                        return viewer_text
 
                 # dcmNo 추출 실패 시: href/src에서 viewer.do URL 직접 탐색
                 main_soup = BeautifulSoup(page_text, "html.parser")
@@ -253,12 +254,22 @@ class DartClient:
                         if not href.startswith("http"):
                             href = "https://dart.fss.or.kr" + href
                         v_res = requests.get(href, headers=headers, timeout=10)
-                        if v_res.status_code == 200 and len(v_res.text) > 300:
-                            return v_res.text
+                        v_text = self._safe_decode_res(v_res)
+                        if v_res.status_code == 200 and len(v_text) > 300:
+                            return v_text
         except Exception:
             pass
 
         return f"❌ 문서 다운로드 실패 (접수번호: {rcept_no})"
+
+    def _safe_decode_res(self, res: requests.Response) -> str:
+        """requests 응답 바이트를 cp949, euc-kr, utf-8 순서로 디코딩하여 한글 깨짐을 방지합니다."""
+        for enc in ("cp949", "euc-kr", "utf-8"):
+            try:
+                return res.content.decode(enc)
+            except (UnicodeDecodeError, TypeError):
+                continue
+        return res.text
 
     def save_raw_html(self, rcept_no: str, corp_name: str, report_name: str, save_dir: Path) -> Optional[Path]:
         """원본 HTML을 파일로 저장합니다 (파서 개발용 샘플 수집)."""
@@ -296,7 +307,7 @@ class DartClient:
             lines = []
             for row in rows:
                 cells = row.find_all(["td", "th", "TD", "TH"])
-                texts = [re.sub(r"\s+", " ", c.get_text()).strip() for c in cells]
+                texts = [re.sub(r"\s+", " ", c.get_text()).replace("&cr;", "").replace("&cr", "").strip() for c in cells]
                 if any(texts):
                     lines.append(" | ".join(texts))
             if lines:
