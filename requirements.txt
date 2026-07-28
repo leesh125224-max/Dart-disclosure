@@ -3,3 +3,4 @@ beautifulsoup4
 supabase
 pandas
 lxml
+python-dotenv
