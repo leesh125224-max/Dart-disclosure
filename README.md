@@ -60,8 +60,7 @@ create index idx_dart_ann_rcept_dt on dart_announcements(rcept_dt);
    ```bash
    pip install -r requirements.txt
    ```
-2. **`.env` 파일 설정** (환경 변수 입력)
-3. **실행**
+2. **실행**
    - **실시간 모니터링 실행:**
      ```bash
      python execution/main.py
